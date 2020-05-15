@@ -1,4 +1,4 @@
-cmake_minimum_required(VERSION 3.1.3)
+cmake_minimum_required(VERSION 3.10.2)
 project(moveit_fake_controller_manager)
 
 set(CMAKE_CXX_STANDARD 14)
@@ -9,34 +9,27 @@ if(NOT CMAKE_CONFIGURATION_TYPES AND NOT CMAKE_BUILD_TYPE)
 endif()
 
 find_package(Boost REQUIRED thread)
-find_package(catkin COMPONENTS
-  moveit_core
-  moveit_ros_planning
-  pluginlib
-  roscpp
-  REQUIRED)
-
-include_directories(${Boost_INCLUDE_DIRS} ${catkin_INCLUDE_DIRS})
-
-catkin_package(
-  LIBRARIES
-  INCLUDE_DIRS
-  CATKIN_DEPENDS
-    moveit_core
-    moveit_ros_planning
-)
+find_package(moveit_core REQUIRED)
+find_package(moveit_ros_planning REQUIRED)
+find_package(pluginlib REQUIRED)
+find_package(rclcpp REQUIRED)
 
 add_library(${PROJECT_NAME}
    src/moveit_fake_controller_manager.cpp
    src/moveit_fake_controllers.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
-target_link_libraries(${PROJECT_NAME} ${catkin_LIBRARIES} ${Boost_LIBRARIES})
+ament_target_dependencies(${PROJECT_NAME} 
+  Boost
+  moveit_core
+  moveit_ros_planning
+)
 
 install(TARGETS ${PROJECT_NAME} 
-        LIBRARY DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION} 
-        ARCHIVE DESTINATION ${CATKIN_PACKAGE_LIB_DESTINATION}
-        RUNTIME DESTINATION ${CATKIN_GLOBAL_BIN_DESTINATION}) 
+        LIBRARY DESTINATION lib
+        ARCHIVE DESTINATION lib
+        RUNTIME DESTINATION bin) 
 
-install(FILES moveit_fake_controller_manager_plugin_description.xml
-        DESTINATION ${CATKIN_PACKAGE_SHARE_DESTINATION}
-       )
+pluginlib_export_plugin_description_file(moveit_core moveit_fake_controller_manager_plugin_description.xml)
+
+ament_export_libraries(${PROJECT_NAME})
+ament_package()
