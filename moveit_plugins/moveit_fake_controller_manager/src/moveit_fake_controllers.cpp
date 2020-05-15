@@ -51,7 +51,7 @@ BaseFakeController::BaseFakeController(const std::string& name, const std::vecto
   ss << "Fake controller '" << name << "' with joints [ ";
   std::copy(joints.begin(), joints.end(), std::ostream_iterator<std::string>(ss, " "));
   ss << "]";
-  RCLCPP_INFO_STREAM(LOGGER, ss.str());
+  RCLCPP_INFO(LOGGER, "%s", ss.str().c_str());
 }
 
 void BaseFakeController::getJoints(std::vector<std::string>& joints) const

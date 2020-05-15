@@ -14,7 +14,7 @@ find_package(moveit_ros_planning REQUIRED)
 find_package(pluginlib REQUIRED)
 find_package(rclcpp REQUIRED)
 
-add_library(${PROJECT_NAME}
+add_library(${PROJECT_NAME} SHARED
    src/moveit_fake_controller_manager.cpp
    src/moveit_fake_controllers.cpp)
 set_target_properties(${PROJECT_NAME} PROPERTIES VERSION "${${PROJECT_NAME}_VERSION}")
@@ -32,4 +32,5 @@ install(TARGETS ${PROJECT_NAME}
 pluginlib_export_plugin_description_file(moveit_core moveit_fake_controller_manager_plugin_description.xml)
 
 ament_export_libraries(${PROJECT_NAME})
+ament_export_dependencies(moveit_core)
 ament_package()
