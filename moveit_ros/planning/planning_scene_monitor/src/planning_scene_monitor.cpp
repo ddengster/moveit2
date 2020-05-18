@@ -265,10 +265,13 @@ void PlanningSceneMonitor::initialize(const planning_scene::PlanningScenePtr& sc
 
   //@todo: can remove DynamicReconfigureImpl now that we have ported parameters over
   reconfigure_impl_ = new DynamicReconfigureImpl(this);
-  bool publish_planning_scene = node_->get_parameter("planning_scene_monitor.publish_planning_scene").as_bool();
-  bool publish_geom_updates = node_->get_parameter("planning_scene_monitor.publish_geometry_updates").as_bool();
-  bool publish_state_updates = node_->get_parameter("planning_scene_monitor.publish_state_updates").as_bool();
-  bool publish_transform_updates = node_->get_parameter("planning_scene_monitor.publish_transforms_updates").as_bool();
+
+  bool publish_planning_scene = false, publish_geom_updates = false, publish_state_updates = false,
+    publish_transform_updates = false;
+  node_->get_parameter_or("planning_scene_monitor.publish_planning_scene", publish_planning_scene, false);
+  node_->get_parameter_or("planning_scene_monitor.publish_geometry_updates", publish_geom_updates, false);
+  node_->get_parameter_or("planning_scene_monitor.publish_state_updates", publish_state_updates, false);
+  node_->get_parameter_or("planning_scene_monitor.publish_transforms_updates", publish_transform_updates, false);
 
   PlanningSceneMonitor::SceneUpdateType event = PlanningSceneMonitor::UPDATE_NONE;
   if (publish_geom_updates)
