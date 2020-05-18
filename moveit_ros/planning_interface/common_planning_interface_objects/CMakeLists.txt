@@ -13,4 +13,4 @@ install(TARGETS ${MOVEIT_LIB_NAME}
   LIBRARY DESTINATION lib
   RUNTIME DESTINATION bin)
 
-install(DIRECTORY include/ DESTINATION include)
+install(DIRECTORY include/ DESTINATION common_planning_interface_objects/include)
