@@ -93,7 +93,6 @@ add_subdirectory(move_group_interface)
 add_subdirectory(moveit_cpp)
 
 ament_export_include_directories(${THIS_PACKAGE_INCLUDE_DIRS})
-ament_export_include_directories(moveit_msgs)
 ament_export_libraries(${THIS_PACKAGE_LIBRARIES})
 ament_export_dependencies(${THIS_PACKAGE_INCLUDE_DEPENDS})
 
