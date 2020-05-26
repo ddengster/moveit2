@@ -42,11 +42,11 @@
 
 #include <geometric_shapes/shape_operations.h>
 
-#include <rviz/display_context.h>
-#include <rviz/frame_manager.h>
+#include <rviz_common/display_context.hpp>
+#include <rviz_common/frame_manager_iface.hpp>
 #include <tf2_ros/buffer.h>
 
-#include <std_srvs/Empty.h>
+#include <std_srvs/srv/empty.hpp>
 
 #include <QMessageBox>
 #include <QInputDialog>
@@ -56,15 +56,20 @@
 
 namespace moveit_rviz_plugin
 {
-MotionPlanningFrame::MotionPlanningFrame(MotionPlanningDisplay* pdisplay, rviz::DisplayContext* context,
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_ros_visualization.motion_planning_frame");
+
+MotionPlanningFrame::MotionPlanningFrame(MotionPlanningDisplay* pdisplay, rviz_common::DisplayContext* context,
                                          QWidget* parent)
   : QWidget(parent)
   , planning_display_(pdisplay)
   , context_(context)
   , ui_(new Ui::MotionPlanningUI())
   , first_time_(true)
-  , clear_octomap_service_client_(nh_.serviceClient<std_srvs::Empty>(move_group::CLEAR_OCTOMAP_SERVICE_NAME))
 {
+  node_ = planning_display_->getNode();
+  clear_octomap_service_client_ = node_->create_client<std_srvs::srv::Empty>(move_group::CLEAR_OCTOMAP_SERVICE_NAME);
+
   // set up the GUI
   ui_->setupUi(this);
   // add more tabs
@@ -153,39 +158,35 @@ MotionPlanningFrame::MotionPlanningFrame(MotionPlanningDisplay* pdisplay, rviz::
 
   known_collision_objects_version_ = 0;
 
-  planning_scene_publisher_ = nh_.advertise<moveit_msgs::msg::PlanningScene>("planning_scene", 1);
-  planning_scene_world_publisher_ = nh_.advertise<moveit_msgs::msg::PlanningSceneWorld>("planning_scene_world", 1);
+  planning_scene_publisher_ = node_->create_publisher<moveit_msgs::msg::PlanningScene>("planning_scene", 1);
+  planning_scene_world_publisher_ = node_->create_publisher<moveit_msgs::msg::PlanningSceneWorld>("planning_scene_world", 1);
 
-  // object_recognition_trigger_publisher_ = nh_.advertise<std_msgs::Bool>("recognize_objects_switch", 1);
-  object_recognition_client_.reset(new actionlib::SimpleActionClient<object_recognition_msgs::ObjectRecognitionAction>(
-      OBJECT_RECOGNITION_ACTION, false));
-  object_recognition_subscriber_ =
-      nh_.subscribe("recognized_object_array", 1, &MotionPlanningFrame::listenDetectedObjects, this);
+  object_recognition_client_ = rclcpp_action::create_client<object_recognition_msgs::action::ObjectRecognition>(
+        node_->get_node_base_interface(),
+        node_->get_node_graph_interface(),
+        node_->get_node_logging_interface(),
+        node_->get_node_waitables_interface(),
+        OBJECT_RECOGNITION_ACTION);
 
-  if (object_recognition_client_)
-  {
-    try
-    {
-      waitForAction(object_recognition_client_, nh_, ros::Duration(3.0), OBJECT_RECOGNITION_ACTION);
-    }
-    catch (std::exception& ex)
-    {
-      // ROS_ERROR("Object recognition action: %s", ex.what());
-      object_recognition_client_.reset();
-    }
-  }
+  object_recognition_subscriber_ = node_->create_subscription<object_recognition_msgs::msg::RecognizedObjectArray>(
+    "recognized_object_array", 1, std::bind(&MotionPlanningFrame::listenDetectedObjects, this, std::placeholders::_1));
+
+  if (!object_recognition_client_->wait_for_action_server(std::chrono::seconds(3)))
+    RCLCPP_ERROR(LOGGER, "Action server: %s not available", OBJECT_RECOGNITION_ACTION.c_str());
+
   try
   {
-    planning_scene_interface_.reset(new moveit::planning_interface::PlanningSceneInterface());
+    planning_scene_interface_.reset(new moveit::planning_interface::PlanningSceneInterface("rviz_planning_scene_interface_node"));
   }
   catch (std::exception& ex)
   {
-    ROS_ERROR("%s", ex.what());
+    RCLCPP_ERROR(LOGGER, "Failed to load planning_scene_interface_: %s", ex.what());
   }
 
   try
   {
     const planning_scene_monitor::LockedPlanningSceneRO& ps = planning_display_->getPlanningSceneRO();
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
     if (ps)
     {
       semantic_world_.reset(new moveit::semantic_world::SemanticWorld(ps));
@@ -196,10 +197,11 @@ MotionPlanningFrame::MotionPlanningFrame(MotionPlanningDisplay* pdisplay, rviz::
     {
       semantic_world_->addTableCallback(boost::bind(&MotionPlanningFrame::updateTables, this));
     }
+#endif
   }
   catch (std::exception& ex)
   {
-    ROS_ERROR("%s", ex.what());
+    RCLCPP_ERROR(LOGGER, "Failed to get semantic world: %s", ex.what());
   }
 }
 
@@ -231,28 +233,31 @@ void MotionPlanningFrame::allowExternalProgramCommunication(bool enable)
   planning_display_->toggleSelectPlanningGroupSubscription(enable);
   if (enable)
   {
-    ros::NodeHandle nh;
-    plan_subscriber_ = nh.subscribe("/rviz/moveit/plan", 1, &MotionPlanningFrame::remotePlanCallback, this);
-    execute_subscriber_ = nh.subscribe("/rviz/moveit/execute", 1, &MotionPlanningFrame::remoteExecuteCallback, this);
-    stop_subscriber_ = nh.subscribe("/rviz/moveit/stop", 1, &MotionPlanningFrame::remoteStopCallback, this);
-    update_start_state_subscriber_ =
-        nh.subscribe("/rviz/moveit/update_start_state", 1, &MotionPlanningFrame::remoteUpdateStartStateCallback, this);
-    update_goal_state_subscriber_ =
-        nh.subscribe("/rviz/moveit/update_goal_state", 1, &MotionPlanningFrame::remoteUpdateGoalStateCallback, this);
-    update_custom_start_state_subscriber_ = nh.subscribe(
-        "/rviz/moveit/update_custom_start_state", 1, &MotionPlanningFrame::remoteUpdateCustomStartStateCallback, this);
-    update_custom_goal_state_subscriber_ = nh.subscribe(
-        "/rviz/moveit/update_custom_goal_state", 1, &MotionPlanningFrame::remoteUpdateCustomGoalStateCallback, this);
+    using std::placeholders::_1;
+    plan_subscriber_ = node_->create_subscription<std_msgs::msg::Empty>(
+      "/rviz/moveit/plan", 1, std::bind(&MotionPlanningFrame::remotePlanCallback, this, _1));
+    execute_subscriber_ = node_->create_subscription<std_msgs::msg::Empty>(
+      "/rviz/moveit/execute", 1, std::bind(&MotionPlanningFrame::remoteExecuteCallback, this, _1));
+    stop_subscriber_ = node_->create_subscription<std_msgs::msg::Empty>(
+      "/rviz/moveit/stop", 1, std::bind(&MotionPlanningFrame::remoteStopCallback, this, _1));
+    update_start_state_subscriber_ = node_->create_subscription<std_msgs::msg::Empty>(
+      "/rviz/moveit/update_start_state", 1, std::bind(&MotionPlanningFrame::remoteUpdateStartStateCallback, this, _1));
+    update_goal_state_subscriber_=  node_->create_subscription<std_msgs::msg::Empty>(
+      "/rviz/moveit/update_goal_state", 1, std::bind(&MotionPlanningFrame::remoteUpdateGoalStateCallback, this, _1));
+    update_custom_start_state_subscriber_=  node_->create_subscription<moveit_msgs::msg::RobotState>(
+      "/rviz/moveit/update_custom_start_state", 1, std::bind(&MotionPlanningFrame::remoteUpdateCustomStartStateCallback, this, _1));
+    update_custom_goal_state_subscriber_=  node_->create_subscription<moveit_msgs::msg::RobotState>(
+      "/rviz/moveit/update_custom_goal_state", 1, std::bind(&MotionPlanningFrame::remoteUpdateCustomGoalStateCallback, this, _1));
   }
   else
   {  // disable
-    plan_subscriber_.shutdown();
-    execute_subscriber_.shutdown();
-    stop_subscriber_.shutdown();
-    update_start_state_subscriber_.shutdown();
-    update_goal_state_subscriber_.shutdown();
-    update_custom_start_state_subscriber_.shutdown();
-    update_custom_goal_state_subscriber_.shutdown();
+    plan_subscriber_.reset();
+    execute_subscriber_.reset();
+    stop_subscriber_.reset();
+    update_start_state_subscriber_.reset();
+    update_goal_state_subscriber_.reset();
+    update_custom_start_state_subscriber_.reset();
+    update_custom_goal_state_subscriber_.reset();
   }
 }
 
@@ -330,29 +335,34 @@ void MotionPlanningFrame::changePlanningGroupHelper()
 
   if (!group.empty() && robot_model)
   {
+    RCLCPP_INFO(LOGGER, "group %s", group.c_str());
     if (move_group_ && move_group_->getName() == group)
       return;
-    ROS_INFO("Constructing new MoveGroup connection for group '%s' in namespace '%s'", group.c_str(),
+    RCLCPP_INFO(LOGGER, "Constructing new MoveGroup connection for group '%s' in namespace '%s'", group.c_str(),
              planning_display_->getMoveGroupNS().c_str());
     moveit::planning_interface::MoveGroupInterface::Options opt(group);
     opt.robot_model_ = robot_model;
     opt.robot_description_.clear();
-    opt.node_handle_ = ros::NodeHandle(planning_display_->getMoveGroupNS());
+    //opt.node_handle_ = ros::NodeHandle(planning_display_->getMoveGroupNS());
+    opt.node_ = node_;
     try
     {
 #ifdef RVIZ_TF1
       std::shared_ptr<tf2_ros::Buffer> tf_buffer = moveit::planning_interface::getSharedTF();
 #else
-      std::shared_ptr<tf2_ros::Buffer> tf_buffer = context_->getFrameManager()->getTF2BufferPtr();
+      //@note: tf2 no longer accessible?
+      // /std::shared_ptr<tf2_ros::Buffer> tf_buffer = context_->getFrameManager()->getTF2BufferPtr(); 
+      std::shared_ptr<tf2_ros::Buffer> tf_buffer;
 #endif
-      move_group_.reset(new moveit::planning_interface::MoveGroupInterface(opt, tf_buffer, ros::WallDuration(30, 0)));
-
+      move_group_.reset(new moveit::planning_interface::MoveGroupInterface(opt, tf_buffer, rclcpp::Duration(30)));
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
       if (planning_scene_storage_)
         move_group_->setConstraintsDatabase(ui_->database_host->text().toStdString(), ui_->database_port->value());
+#endif
     }
     catch (std::exception& ex)
     {
-      ROS_ERROR("%s", ex.what());
+      RCLCPP_ERROR(LOGGER, "%s", ex.what());
     }
     planning_display_->addMainLoopJob(
         boost::bind(&MotionPlanningParamWidget::setMoveGroup, ui_->planner_param_treeview, move_group_));
@@ -364,7 +374,9 @@ void MotionPlanningFrame::changePlanningGroupHelper()
       planning_display_->addMainLoopJob([=]() { ui_->use_cartesian_path->setEnabled(has_unique_endeffector); });
       moveit_msgs::msg::PlannerInterfaceDescription desc;
       if (move_group_->getInterfaceDescription(desc))
+      {
         planning_display_->addMainLoopJob(boost::bind(&MotionPlanningFrame::populatePlannersList, this, desc));
+      }
       planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::populateConstraintsList, this),
                                           "populateConstraintsList");
 
@@ -453,8 +465,7 @@ void MotionPlanningFrame::importResource(const std::string& path)
             bool ok = false;
             QString text = QInputDialog::getText(
                 this, tr("Choose a new name"), tr("Import the new object under the name:"), QLineEdit::Normal,
-                QString::fromStdString(name + "-" + boost::lexical_cast<std::string>(
-                                                        planning_display_->getPlanningSceneRO()->getWorld()->size())),
+                QString::fromStdString(name + "-" + std::to_string(planning_display_->getPlanningSceneRO()->getWorld()->size())),
                 &ok);
             if (ok)
             {
@@ -522,10 +533,10 @@ void MotionPlanningFrame::tabChanged(int index)
     selectedCollisionObjectChanged();
 }
 
-void MotionPlanningFrame::updateSceneMarkers(float wall_dt, float /*ros_dt*/)
+void MotionPlanningFrame::updateSceneMarkers(float /*wall_dt*/, float /*ros_dt*/)
 {
   if (scene_marker_)
-    scene_marker_->update(wall_dt);
+    scene_marker_->update();
 }
 
 void MotionPlanningFrame::updateExternalCommunication()

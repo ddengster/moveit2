@@ -33,8 +33,10 @@
  *********************************************************************/
 
 /* Author: Mario Prats, Ioan Sucan */
-
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
 #include <moveit/warehouse/state_storage.h>
+#endif
+
 #include <moveit/motion_planning_rviz_plugin/motion_planning_frame.h>
 #include <moveit/motion_planning_rviz_plugin/motion_planning_display.h>
 #include <moveit/robot_state/conversions.h>
@@ -46,10 +48,13 @@
 
 namespace moveit_rviz_plugin
 {
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_ros_visualization.motion_planning_frame_states");
+
 void MotionPlanningFrame::populateRobotStatesList()
 {
   ui_->list_states->clear();
-  for (std::pair<const std::string, moveit_msgs::RobotState>& robot_state : robot_states_)
+  for (std::pair<const std::string, moveit_msgs::msg::RobotState>& robot_state : robot_states_)
   {
     QListWidgetItem* item = new QListWidgetItem(QString(robot_state.first.c_str()));
     ui_->list_states->addItem(item);
@@ -58,6 +63,7 @@ void MotionPlanningFrame::populateRobotStatesList()
 
 void MotionPlanningFrame::loadStateButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (robot_state_storage_)
   {
     bool ok;
@@ -70,6 +76,7 @@ void MotionPlanningFrame::loadStateButtonClicked()
     }
   }
   else
+#endif
   {
     QMessageBox::warning(this, "Warning", "Not connected to a database.");
   }
@@ -78,6 +85,7 @@ void MotionPlanningFrame::loadStateButtonClicked()
 void MotionPlanningFrame::loadStoredStates(const std::string& pattern)
 {
   std::vector<std::string> names;
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   try
   {
     robot_state_storage_->getKnownRobotStates(pattern, names);
@@ -88,12 +96,13 @@ void MotionPlanningFrame::loadStoredStates(const std::string& pattern)
                          QString("Wrongly formatted regular expression for robot states: ").append(ex.what()));
     return;
   }
-
+#endif
   // Clear the current list
   clearStatesButtonClicked();
 
   for (const std::string& name : names)
   {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
     moveit_warehouse::RobotStateWithMetadata rs;
     bool got_state = false;
     try
@@ -115,6 +124,7 @@ void MotionPlanningFrame::loadStoredStates(const std::string& pattern)
 
     // Store the current start state
     robot_states_.insert(RobotStatePair(name, *rs));
+#endif
   }
   populateRobotStatesList();
 }
@@ -148,6 +158,7 @@ void MotionPlanningFrame::saveRobotStateButtonClicked(const robot_state::RobotSt
         robot_states_.insert(RobotStatePair(name, msg));
 
         // Save to the database if connected
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
         if (robot_state_storage_)
         {
           try
@@ -164,6 +175,7 @@ void MotionPlanningFrame::saveRobotStateButtonClicked(const robot_state::RobotSt
           QMessageBox::warning(this, "Warning",
                                "Not connected to a database. The state will be created but not stored");
         }
+#endif
       }
     }
     else
@@ -196,6 +208,7 @@ void MotionPlanningFrame::setAsStartStateButtonClicked()
 
 void MotionPlanningFrame::setAsGoalStateButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_robot_interaction is ported
   QListWidgetItem* item = ui_->list_states->currentItem();
 
   if (item)
@@ -204,10 +217,12 @@ void MotionPlanningFrame::setAsGoalStateButtonClicked()
     robot_state::robotStateMsgToRobotState(robot_states_[item->text().toStdString()], robot_state);
     planning_display_->setQueryGoalState(robot_state);
   }
+#endif
 }
 
 void MotionPlanningFrame::removeStateButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (robot_state_storage_)
   {
     // Warn the user
@@ -233,13 +248,14 @@ void MotionPlanningFrame::removeStateButtonClicked()
           }
           catch (std::exception& ex)
           {
-            ROS_ERROR("%s", ex.what());
+            RCLCPP_ERROR(LOGGER, "%s", ex.what());
           }
         }
         break;
       }
     }
   }
+#endif
   populateRobotStatesList();
 }
 

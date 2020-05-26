@@ -33,10 +33,11 @@
  *********************************************************************/
 
 /* Author: Ioan Sucan */
-
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
 #include <moveit/warehouse/planning_scene_storage.h>
 #include <moveit/warehouse/constraints_storage.h>
 #include <moveit/warehouse/state_storage.h>
+#endif
 
 #include <moveit/motion_planning_rviz_plugin/motion_planning_frame.h>
 #include <moveit/motion_planning_rviz_plugin/motion_planning_display.h>
@@ -44,10 +45,10 @@
 #include <moveit/robot_state/conversions.h>
 #include <moveit/robot_interaction/interactive_marker_helpers.h>
 
-#include <interactive_markers/tools.h>
+#include <interactive_markers/tools.hpp>
 
-#include <rviz/display_context.h>
-#include <rviz/window_manager_interface.h>
+#include <rviz_common/display_context.hpp>
+#include <rviz_common/window_manager_interface.hpp>
 
 #include <QMessageBox>
 #include <QInputDialog>
@@ -60,8 +61,12 @@
 
 namespace moveit_rviz_plugin
 {
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_ros_visualization.motion_planning_frame_scenes");
+
 void MotionPlanningFrame::saveSceneButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (planning_scene_storage_)
   {
     const std::string& name = planning_display_->getPlanningSceneRO()->getName();
@@ -91,7 +96,7 @@ void MotionPlanningFrame::saveSceneButtonClicked()
           if (ok)
           {
             planning_display_->getPlanningSceneRW()->setName(new_name.toStdString());
-            rviz::Property* prop = planning_display_->subProp("Scene Geometry")->subProp("Scene Name");
+            rviz_common::properties::Property* prop = planning_display_->subProp("Scene Geometry")->subProp("Scene Name");
             if (prop)
             {
               bool old = prop->blockSignals(true);
@@ -109,6 +114,7 @@ void MotionPlanningFrame::saveSceneButtonClicked()
     planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::computeSaveSceneButtonClicked, this),
                                         "save scene");
   }
+#endif
 }
 
 void MotionPlanningFrame::planningSceneItemClicked()
@@ -118,6 +124,7 @@ void MotionPlanningFrame::planningSceneItemClicked()
 
 void MotionPlanningFrame::saveQueryButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (planning_scene_storage_)
   {
     QList<QTreeWidgetItem*> sel = ui_->planning_scene_tree->selectedItems();
@@ -178,6 +185,7 @@ void MotionPlanningFrame::saveQueryButtonClicked()
       }
     }
   }
+#endif
 }
 
 void MotionPlanningFrame::deleteSceneButtonClicked()
@@ -208,6 +216,7 @@ void MotionPlanningFrame::warehouseItemNameChanged(QTreeWidgetItem* item, int co
 {
   if (item->text(column) == item->toolTip(column) || item->toolTip(column).length() == 0)
     return;
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   moveit_warehouse::PlanningSceneStoragePtr planning_scene_storage = planning_scene_storage_;
   if (!planning_scene_storage)
     return;
@@ -250,10 +259,12 @@ void MotionPlanningFrame::warehouseItemNameChanged(QTreeWidgetItem* item, int co
       item->setToolTip(column, item->text(column));
     }
   }
+#endif
 }
 
 void MotionPlanningFrame::populatePlanningSceneTreeView()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   moveit_warehouse::PlanningSceneStoragePtr planning_scene_storage = planning_scene_storage_;
   if (!planning_scene_storage)
     return;
@@ -297,5 +308,6 @@ void MotionPlanningFrame::populatePlanningSceneTreeView()
   ui_->planning_scene_tree->sortItems(0, Qt::AscendingOrder);
   ui_->planning_scene_tree->setUpdatesEnabled(true);
   checkPlanningSceneTreeEnabledButtons();
+#endif
 }
 }  // namespace moveit_rviz_plugin

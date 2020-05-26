@@ -144,8 +144,10 @@ protected:
 private:
   Ui::MotionPlanningFrameJointsUI* ui_;
   MotionPlanningDisplay* planning_display_;
+
   robot_interaction::InteractionHandlerPtr start_state_handler_;
   robot_interaction::InteractionHandlerPtr goal_state_handler_;
+
   std::unique_ptr<JMGItemModel> start_state_model_;
   std::unique_ptr<JMGItemModel> goal_state_model_;
   // break circular loop of stateChanged() -> dataChanged() |-> PlanningDisplay::setQuery*State()

@@ -33,16 +33,16 @@
  *********************************************************************/
 
 /* Author: Ioan Sucan */
-
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
 #include <moveit/warehouse/planning_scene_storage.h>
 #include <moveit/warehouse/constraints_storage.h>
 #include <moveit/warehouse/state_storage.h>
-
+#endif
 #include <moveit/motion_planning_rviz_plugin/motion_planning_frame.h>
 #include <moveit/motion_planning_rviz_plugin/motion_planning_display.h>
 
-#include <rviz/display_context.h>
-#include <rviz/window_manager_interface.h>
+#include <rviz_common/display_context.hpp>
+#include <rviz_common/window_manager_interface.hpp>
 
 #include <QMessageBox>
 #include <QInputDialog>
@@ -51,6 +51,9 @@
 
 namespace moveit_rviz_plugin
 {
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_ros_visualization.motion_planning_frame_context");
+
 void MotionPlanningFrame::databaseConnectButtonClicked()
 {
   planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::computeDatabaseConnectButtonClicked, this),
@@ -64,7 +67,7 @@ void MotionPlanningFrame::publishSceneButtonClicked()
   {
     moveit_msgs::msg::PlanningScene msg;
     ps->getPlanningSceneMsg(msg);
-    planning_scene_publisher_.publish(msg);
+    planning_scene_publisher_->publish(msg);
   }
 }
 
@@ -109,8 +112,10 @@ void MotionPlanningFrame::resetDbButtonClicked()
 
 void MotionPlanningFrame::computeDatabaseConnectButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (planning_scene_storage_)
   {
+
     planning_scene_storage_.reset();
     robot_state_storage_.reset();
     constraints_storage_.reset();
@@ -148,6 +153,7 @@ void MotionPlanningFrame::computeDatabaseConnectButtonClicked()
     planning_display_->addMainLoopJob(
         boost::bind(&MotionPlanningFrame::computeDatabaseConnectButtonClickedHelper, this, 4));
   }
+#endif
 }
 
 void MotionPlanningFrame::computeDatabaseConnectButtonClickedHelper(int mode)
@@ -208,11 +214,13 @@ void MotionPlanningFrame::computeDatabaseConnectButtonClickedHelper(int mode)
 
 void MotionPlanningFrame::computeResetDbButtonClicked(const std::string& db)
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_warehouse is ported
   if (db == "Constraints" && constraints_storage_)
     constraints_storage_->reset();
   else if (db == "Robot States" && robot_state_storage_)
     robot_state_storage_->reset();
   else if (db == "Planning Scenes")
     planning_scene_storage_->reset();
+#endif
 }
 }  // namespace moveit_rviz_plugin

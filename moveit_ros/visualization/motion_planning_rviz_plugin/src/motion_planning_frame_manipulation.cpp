@@ -39,15 +39,19 @@
 
 #include <moveit/kinematic_constraints/utils.h>
 #include <moveit/robot_state/conversions.h>
-#include <object_recognition_msgs/ObjectRecognitionGoal.h>
+#include <object_recognition_msgs/action/object_recognition.hpp>
 
 #include "ui_motion_planning_rviz_plugin_frame.h"
 
 namespace moveit_rviz_plugin
 {
+
+static const rclcpp::Logger LOGGER = rclcpp::get_logger("moveit_ros_visualization.motion_planning_frame_manipulation");
+
 /////////////// Object Detection ///////////////////////
 void MotionPlanningFrame::detectObjectsButtonClicked()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
   if (!semantic_world_)
   {
     const planning_scene_monitor::LockedPlanningSceneRO& ps = planning_display_->getPlanningSceneRO();
@@ -60,6 +64,7 @@ void MotionPlanningFrame::detectObjectsButtonClicked()
       semantic_world_->addTableCallback(boost::bind(&MotionPlanningFrame::updateTables, this));
     }
   }
+#endif
   planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::triggerObjectDetection, this),
                                       "detect objects");
 }
@@ -77,15 +82,15 @@ void MotionPlanningFrame::processDetectedObjects()
   double max_y = ui_->roi_center_y->value() + ui_->roi_size_y->value() / 2.0;
   double max_z = ui_->roi_center_z->value() + ui_->roi_size_z->value() / 2.0;
 
-  ros::Time start_time = ros::Time::now();
-  while (object_ids.empty() && ros::Time::now() - start_time <= ros::Duration(3.0))
+  rclcpp::Time start_time = rclcpp::Clock().now();
+  while (object_ids.empty() && (rclcpp::Clock().now() - start_time) <= rclcpp::Duration(3.0))
   {
     object_ids =
         planning_scene_interface_->getKnownObjectNamesInROI(min_x, min_y, min_z, max_x, max_y, max_z, true, objects);
-    ros::Duration(0.5).sleep();
+    rclcpp::sleep_for(std::chrono::seconds(1));
   }
 
-  ROS_DEBUG("Found %d objects", (int)object_ids.size());
+  RCLCPP_DEBUG(LOGGER, "Found %d objects", (int)object_ids.size());
   updateDetectedObjectsList(object_ids, objects);
 }
 
@@ -94,11 +99,11 @@ void MotionPlanningFrame::selectedDetectedObjectChanged()
   QList<QListWidgetItem*> sel = ui_->detected_objects_list->selectedItems();
   if (sel.empty())
   {
-    ROS_INFO("No objects to select");
+    RCLCPP_INFO(LOGGER, "No objects to select");
     return;
   }
   planning_scene_monitor::LockedPlanningSceneRW ps = planning_display_->getPlanningSceneRW();
-  std_msgs::ColorRGBA pick_object_color;
+  std_msgs::msg::ColorRGBA pick_object_color;
   pick_object_color.r = 1.0;
   pick_object_color.g = 0.0;
   pick_object_color.b = 0.0;
@@ -121,35 +126,33 @@ void MotionPlanningFrame::triggerObjectDetection()
 {
   if (!object_recognition_client_)
   {
-    object_recognition_client_.reset(
-        new actionlib::SimpleActionClient<object_recognition_msgs::ObjectRecognitionAction>(OBJECT_RECOGNITION_ACTION,
-                                                                                            false));
-    try
+    object_recognition_client_ = 
+      rclcpp_action::create_client<object_recognition_msgs::action::ObjectRecognition>(
+        node_->get_node_base_interface(),
+        node_->get_node_graph_interface(),
+        node_->get_node_logging_interface(),
+        node_->get_node_waitables_interface(),
+        OBJECT_RECOGNITION_ACTION
+      );
+    if (object_recognition_client_->wait_for_action_server(std::chrono::seconds(3)))
     {
-      waitForAction(object_recognition_client_, nh_, ros::Duration(3.0), OBJECT_RECOGNITION_ACTION);
-    }
-    catch (std::exception& ex)
-    {
-      ROS_ERROR("Object recognition action: %s", ex.what());
+      RCLCPP_ERROR(LOGGER, "Object recognition action server not responsive");
       return;
     }
   }
-  object_recognition_msgs::ObjectRecognitionGoal goal;
-  object_recognition_client_->sendGoal(goal);
-  if (!object_recognition_client_->waitForResult())
+  object_recognition_msgs::action::ObjectRecognition::Goal goal;
+  auto goal_handle_future = object_recognition_client_->async_send_goal(goal);
+  if (rclcpp::spin_until_future_complete(node_, goal_handle_future) !=
+    rclcpp::executor::FutureReturnCode::SUCCESS)
   {
-    ROS_INFO_STREAM("Object recognition client returned early");
-  }
-  if (object_recognition_client_->getState() != actionlib::SimpleClientGoalState::SUCCEEDED)
-  {
-    ROS_WARN_STREAM("Fail: " << object_recognition_client_->getState().toString() << ": "
-                             << object_recognition_client_->getState().getText());
+    RCLCPP_ERROR(LOGGER, "ObjectRecognition client: send goal call failed");
+    return;
   }
 }
 
-void MotionPlanningFrame::listenDetectedObjects(const object_recognition_msgs::RecognizedObjectArrayPtr& /*msg*/)
+void MotionPlanningFrame::listenDetectedObjects(const object_recognition_msgs::msg::RecognizedObjectArray::ConstSharedPtr /*msg*/)
 {
-  ros::Duration(1.0).sleep();
+  rclcpp::sleep_for(std::chrono::seconds(1));
   planning_display_->addMainLoopJob(boost::bind(&MotionPlanningFrame::processDetectedObjects, this));
 }
 
@@ -180,13 +183,15 @@ void MotionPlanningFrame::updateDetectedObjectsList(const std::vector<std::strin
 /////////////////////// Support Surfaces ///////////////////////
 void MotionPlanningFrame::updateTables()
 {
-  ROS_DEBUG("Update table callback");
+  RCLCPP_DEBUG(LOGGER, "Update table callback");
   planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::publishTables, this), "publish tables");
 }
 
 void MotionPlanningFrame::publishTables()
 {
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
   semantic_world_->addTablesToCollisionWorld();
+#endif
   planning_display_->addMainLoopJob(boost::bind(&MotionPlanningFrame::updateSupportSurfacesList, this));
 }
 
@@ -195,11 +200,11 @@ void MotionPlanningFrame::selectedSupportSurfaceChanged()
   QList<QListWidgetItem*> sel = ui_->support_surfaces_list->selectedItems();
   if (sel.empty())
   {
-    ROS_INFO("No tables to select");
+    RCLCPP_INFO(LOGGER, "No tables to select");
     return;
   }
   planning_scene_monitor::LockedPlanningSceneRW ps = planning_display_->getPlanningSceneRW();
-  std_msgs::ColorRGBA selected_support_surface_color;
+  std_msgs::msg::ColorRGBA selected_support_surface_color;
   selected_support_surface_color.r = 0.0;
   selected_support_surface_color.g = 0.0;
   selected_support_surface_color.b = 1.0;
@@ -223,8 +228,12 @@ void MotionPlanningFrame::updateSupportSurfacesList()
   double max_x = ui_->roi_center_x->value() + ui_->roi_size_x->value() / 2.0;
   double max_y = ui_->roi_center_y->value() + ui_->roi_size_y->value() / 2.0;
   double max_z = ui_->roi_center_z->value() + ui_->roi_size_z->value() / 2.0;
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
   std::vector<std::string> support_ids = semantic_world_->getTableNamesInROI(min_x, min_y, min_z, max_x, max_y, max_z);
-  ROS_INFO("%d Tables in collision world", (int)support_ids.size());
+#else
+  std::vector<std::string> support_ids;
+#endif
+  RCLCPP_INFO(LOGGER, "%d Tables in collision world", (int)support_ids.size());
 
   ui_->support_surfaces_list->setUpdatesEnabled(false);
   bool old_state = ui_->support_surfaces_list->blockSignals(true);
@@ -254,7 +263,7 @@ void MotionPlanningFrame::pickObjectButtonClicked()
   std::string group_name = planning_display_->getCurrentPlanningGroup();
   if (sel.empty())
   {
-    ROS_INFO("No objects to pick");
+    RCLCPP_INFO(LOGGER, "No objects to pick");
     return;
   }
   pick_object_name_[group_name] = sel[0]->text().toStdString();
@@ -263,23 +272,25 @@ void MotionPlanningFrame::pickObjectButtonClicked()
     support_surface_name_ = sel_table[0]->text().toStdString();
   else
   {
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
     if (semantic_world_)
     {
       std::vector<std::string> object_names;
       object_names.push_back(pick_object_name_[group_name]);
-      std::map<std::string, geometry_msgs::Pose> object_poses = planning_scene_interface_->getObjectPoses(object_names);
+      std::map<std::string, geometry_msgs::msg::Pose> object_poses = planning_scene_interface_->getObjectPoses(object_names);
       if (object_poses.find(pick_object_name_[group_name]) != object_poses.end())
       {
-        ROS_DEBUG("Finding current table for object: %s", pick_object_name_[group_name].c_str());
+        RCLCPP_DEBUG(LOGGER, "Finding current table for object: %s", pick_object_name_[group_name].c_str());
         support_surface_name_ = semantic_world_->findObjectTable(object_poses[pick_object_name_[group_name]]);
       }
       else
         support_surface_name_.clear();
     }
     else
+#endif
       support_surface_name_.clear();
   }
-  ROS_INFO("Trying to pick up object %s from support surface %s", pick_object_name_[group_name].c_str(),
+  RCLCPP_INFO(LOGGER, "Trying to pick up object %s from support surface %s", pick_object_name_[group_name].c_str(),
            support_surface_name_.c_str());
   planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::pickObject, this), "pick");
 }
@@ -294,7 +305,7 @@ void MotionPlanningFrame::placeObjectButtonClicked()
   else
   {
     support_surface_name_.clear();
-    ROS_ERROR("Need to specify table to place object on");
+    RCLCPP_ERROR(LOGGER, "Need to specify table to place object on");
     return;
   }
 
@@ -305,7 +316,7 @@ void MotionPlanningFrame::placeObjectButtonClicked()
   const planning_scene_monitor::LockedPlanningSceneRO& ps = planning_display_->getPlanningSceneRO();
   if (!ps)
   {
-    ROS_ERROR("No planning scene");
+    RCLCPP_ERROR(LOGGER, "No planning scene");
     return;
   }
   const robot_model::JointModelGroup* jmg = ps->getCurrentState().getJointModelGroup(group_name);
@@ -314,20 +325,22 @@ void MotionPlanningFrame::placeObjectButtonClicked()
 
   if (attached_bodies.empty())
   {
-    ROS_ERROR("No bodies to place");
+    RCLCPP_ERROR(LOGGER, "No bodies to place");
     return;
   }
 
-  geometry_msgs::Quaternion upright_orientation;
+  geometry_msgs::msg::Quaternion upright_orientation;
   upright_orientation.w = 1.0;
 
   // Else place the first one
   place_poses_.clear();
+#if 0 // TODO (ddengster): Enable when moveit_ros_perception is ported
   place_poses_ = semantic_world_->generatePlacePoses(support_surface_name_, attached_bodies[0]->getShapes()[0],
                                                      upright_orientation, 0.1);
   planning_display_->visualizePlaceLocations(place_poses_);
   place_object_name_ = attached_bodies[0]->getName();
   planning_display_->addBackgroundJob(boost::bind(&MotionPlanningFrame::placeObject, this), "place");
+#endif
 }
 
 void MotionPlanningFrame::pickObject()
@@ -336,7 +349,7 @@ void MotionPlanningFrame::pickObject()
   ui_->pick_button->setEnabled(false);
   if (pick_object_name_.find(group_name) == pick_object_name_.end())
   {
-    ROS_ERROR("No pick object set for this group");
+    RCLCPP_ERROR(LOGGER, "No pick object set for this group");
     return;
   }
   if (!support_surface_name_.empty())
