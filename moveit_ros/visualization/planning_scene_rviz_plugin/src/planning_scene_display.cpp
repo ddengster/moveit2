@@ -76,7 +76,7 @@ PlanningSceneDisplay::PlanningSceneDisplay(bool listen_to_planning_scene, bool s
 
   if (listen_to_planning_scene)
     planning_scene_topic_property_ = new rviz_common::properties::RosTopicProperty(
-        "Planning Scene Topic", "move_group/monitored_planning_scene",
+        "Planning Scene Topic", "/monitored_planning_scene",
         rosidl_generator_traits::data_type<moveit_msgs::msg::PlanningScene>(),
         "The topic on which the moveit_msgs::msg::PlanningScene messages are received", this,
         SLOT(changedPlanningSceneTopic()), this);
@@ -191,7 +191,7 @@ void PlanningSceneDisplay::onInitialize()
     RVIZ_COMMON_LOG_WARNING("Unable to lock weak_ptr from DisplayContext in PlanningSceneDisplay constructor");
     return;
   }
-  node_ = ros_node_abstraction->get_raw_node();
+  raw_node_ = ros_node_abstraction->get_raw_node();
   planning_scene_topic_property_->initialize(ros_node_abstraction);
 
   // the scene node that contains everything
@@ -207,6 +207,33 @@ void PlanningSceneDisplay::onInitialize()
     changedRobotSceneAlpha();
     changedAttachedBodyColor();
   }
+
+  node_ = std::make_shared<rclcpp::Node>("planning_scene_display_rviz");
+  // auto allparams = raw_node_->get_node_parameters_interface()->get_parameter_overrides();
+  // for (auto param : allparams)
+  // {
+  //   RCLCPP_INFO(LOGGER, "parameter: %s", param.first.c_str());
+  //   //controller_mgr_node_->set_parameter(rclcpp::Parameter(param.first, param.second));
+  // }
+  /*auto plist = raw_node_->list_parameters({}, 99);
+  RCLCPP_INFO(LOGGER, "l: %d", plist.names.size());
+  for (auto p : plist.names)
+  {
+    RCLCPP_INFO(LOGGER, "%s", p.c_str());
+  }*/
+  //TODO: ros_node_abstraction has a node added to an executor but the executor only
+  //spins in VisualizationManager::onUpdate, and so when you use the node to create clients it
+  //never receives the callbacks, hence this new executor
+  //https://github.com/ros2/rviz/pull/197
+  executor_.add_node(node_);
+
+  auto spin = [this]()
+  {
+    while (rclcpp::ok()) {
+      executor_.spin_once();
+    }
+  };
+  executor_thread_ = std::thread(spin);
 }
 
 void PlanningSceneDisplay::reset()

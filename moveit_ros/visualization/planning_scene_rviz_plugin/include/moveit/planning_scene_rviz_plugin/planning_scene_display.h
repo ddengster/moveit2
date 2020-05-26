@@ -97,6 +97,7 @@ public:
   planning_scene_monitor::LockedPlanningSceneRW getPlanningSceneRW();
   const planning_scene_monitor::PlanningSceneMonitorPtr& getPlanningSceneMonitor();
 
+  rclcpp::Node::SharedPtr getNode() { return node_; }
 private Q_SLOTS:
 
   // ******************************************************************************************
@@ -195,8 +196,13 @@ protected:
   rviz_common::properties::EnumProperty* octree_render_property_;
   rviz_common::properties::EnumProperty* octree_coloring_property_;
 
-  // rclcpp node
+  // rclcpp node from abstraction
+  rclcpp::Node::SharedPtr raw_node_;
+  
+  // workaround for rclcpp node; create clients on these
   rclcpp::Node::SharedPtr node_;
+  rclcpp::executors::MultiThreadedExecutor executor_;
+  std::thread executor_thread_;
 };
 
 }  // namespace moveit_rviz_plugin
