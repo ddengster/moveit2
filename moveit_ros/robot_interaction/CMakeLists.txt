@@ -54,4 +54,5 @@ install(DIRECTORY include/ DESTINATION include)
 install(DIRECTORY resources DESTINATION share/${PROJECT_NAME})
 
 ament_export_include_directories(include)
+ament_export_libraries(${MOVEIT_LIB_NAME})
 ament_package()
